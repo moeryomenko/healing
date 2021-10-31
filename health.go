@@ -8,21 +8,74 @@ import (
 	"time"
 )
 
-const checkPeriod = 3 * time.Second
+const (
+	defaultCheckPeriod   = 3 * time.Second
+	defaultHealzEndpoint = "/healthz"
+	defaultReadyEndpoint = "/ready"
+)
 
 // The checkers must be compatible with this type.
 type checkFunc func(context.Context) error
 
 type Health struct {
-	liveness  *CheckGroup
-	readiness *CheckGroup
-	server    *http.Server
+	liveness    *CheckGroup
+	readiness   *CheckGroup
+	server      *http.Server
+	checkPeriod time.Duration
+
+	healz, ready string
 }
 
-func New() *Health {
-	return &Health{
-		liveness:  NewCheckGroup(),
-		readiness: NewCheckGroup(),
+func New(opts ...Option) *Health {
+	h := &Health{
+		liveness:    NewCheckGroup(defaultCheckTimeout),
+		readiness:   NewCheckGroup(defaultCheckTimeout),
+		checkPeriod: defaultCheckPeriod,
+		healz:       defaultHealzEndpoint,
+		ready:       defaultReadyEndpoint,
+	}
+
+	for _, opt := range opts {
+		opt(h)
+	}
+
+	return h
+}
+
+type Option func(*Health)
+
+// WithCheckPeriod sets period of launch checks.
+func WithCheckPeriod(period time.Duration) Option {
+	return func(h *Health) {
+		h.checkPeriod = period
+	}
+}
+
+// WithHealthzEndpoint sets custom endpoint to probe liveness.
+func WithHealthzEndpoint(endpoint string) Option {
+	return func(h *Health) {
+		h.healz = endpoint
+	}
+}
+
+// WithReadyEndpoint sets custom endpoint to probe readiness.
+func WithReadyEndpoint(endpoint string) Option {
+	return func(h *Health) {
+		h.ready = endpoint
+	}
+}
+
+// WithLivenessTimeout sets custom timeout for check liveness.
+func WithLivenessTimeout(timeout time.Duration) Option {
+	return func(h *Health) {
+		h.liveness = NewCheckGroup(timeout)
+	}
+}
+
+// WithReadinessTimeout sets custom timeout for check readiness.
+func WithReadinessTimeout(timeout time.Duration) Option {
+	return func(h *Health) {
+		h.readiness = NewCheckGroup(timeout)
 	}
 }
 
@@ -43,7 +96,7 @@ func (h *Health) AddReadyChecker(check checkFunc) {
 
 // Heartbeat periodically run all checkers for both `live` and `ready` states.
 func (h *Health) Heartbeat(ctx context.Context) error {
-	checkTicker := time.NewTicker(checkPeriod)
+	checkTicker := time.NewTicker(h.checkPeriod)
 	defer checkTicker.Stop()
 
 	for {
@@ -61,13 +114,13 @@ func (h *Health) Heartbeat(ctx context.Context) error {
 // offers reference HTTP server that offer all in one routes for liveness and readiness.
 func (h *Health) ListenAndServe(port int) error {
 	router := http.NewServeMux()
-	router.HandleFunc("/healthz", func(rw http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(h.healz, func(rw http.ResponseWriter, r *http.Request) {
 		if h.liveness.IsOK() {
 			return
 		}
 		rw.WriteHeader(http.StatusServiceUnavailable)
 	})
-	router.HandleFunc("/ready", func(rw http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(h.ready, func(rw http.ResponseWriter, r *http.Request) {
 		if h.readiness.IsOK() {
 			return
 		}

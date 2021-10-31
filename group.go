@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	checkTimeout = 2 * time.Second
+	defaultCheckTimeout = 2 * time.Second
 
 	successCheck = iota
 	failedCheck
@@ -18,12 +18,13 @@ const (
 // CheckGroup launch checker concurrently.
 type CheckGroup struct {
 	checkers []checkFunc
+	timeout  time.Duration
 	status   int32
 }
 
 // NewCheckGroup returns new instacnce CheckGroup.
-func NewCheckGroup(checkers ...checkFunc) *CheckGroup {
-	group := &CheckGroup{checkers: make([]checkFunc, 0, len(checkers))}
+func NewCheckGroup(timeout time.Duration, checkers ...checkFunc) *CheckGroup {
+	group := &CheckGroup{timeout: timeout, checkers: make([]checkFunc, 0, len(checkers))}
 	group.checkers = append(group.checkers, checkers...)
 	return group
 }
@@ -36,7 +37,7 @@ func (g *CheckGroup) AddChecker(checker checkFunc) {
 // Check runs checkers.
 func (g *CheckGroup) Check(ctx context.Context) {
 	group := &errgroup.Group{}
-	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
+	ctx, cancel := context.WithTimeout(ctx, g.timeout)
 	defer cancel()
 
 	// NOTE: flush status before checks.
