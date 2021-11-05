@@ -1,4 +1,4 @@
-# Healing
+# Healing [![Go Reference](https://pkg.go.dev/badge/github.com/moeryomenko/healing.svg)](https://pkg.go.dev/github.com/moeryomenko/healing)
 
 Healing is package contains a liveness and readiness controllers, compatible with
 [squad](http://github.com/moeryomenko/squad) package. Also contains postgresql and mysql pools with readiness checker.
