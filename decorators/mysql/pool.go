@@ -20,12 +20,14 @@ type Config struct {
 	DBName         string
 }
 
+// Pool is decorated *client.Pool with health checker of Pool.
 type Pool struct {
 	*client.Pool
 
 	lastPingAt int64
 }
 
+// New return new instance of mysql Pool.
 func New(ctx context.Context, cfg Config, opts ...Option) (*Pool, error) {
 	defaultPoolConfig := &PoolConfig{
 		MinAlive: 10,
