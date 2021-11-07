@@ -112,22 +112,28 @@ func (h *Health) Heartbeat(ctx context.Context) error {
 
 // ListenAndServe provides HTTP listener with results of checks. It
 // offers reference HTTP server that offer all in one routes for liveness and readiness.
-func (h *Health) ListenAndServe(port int) error {
-	router := http.NewServeMux()
-	router.HandleFunc(h.healz, func(rw http.ResponseWriter, r *http.Request) {
-		if h.liveness.IsOK() {
-			return
+func (h *Health) ListenAndServe(port int) func(context.Context) error {
+	return func(_ context.Context) error {
+		router := http.NewServeMux()
+
+		handler := func(check func() bool) http.HandlerFunc {
+			return func(rw http.ResponseWriter, _ *http.Request) {
+				if check() {
+					// default status OK.
+					return
+				}
+				rw.WriteHeader(http.StatusServiceUnavailable)
+			}
 		}
-		rw.WriteHeader(http.StatusServiceUnavailable)
-	})
-	router.HandleFunc(h.ready, func(rw http.ResponseWriter, r *http.Request) {
-		if h.readiness.IsOK() {
-			return
-		}
-		rw.WriteHeader(http.StatusServiceUnavailable)
-	})
-	h.server = &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: router}
-	return h.server.ListenAndServe()
+
+		router.HandleFunc(h.healz, handler(h.liveness.IsOK))
+		router.HandleFunc(h.ready, handler(func() bool {
+			return h.liveness.IsOK() && h.readiness.IsOK()
+		}))
+
+		h.server = &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: router}
+		return h.server.ListenAndServe()
+	}
 }
 
 func (h *Health) Shutdown(ctx context.Context) error {
