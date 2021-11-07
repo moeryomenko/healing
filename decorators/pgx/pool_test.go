@@ -66,7 +66,9 @@ func TestIntegration_Liveness(t *testing.T) {
 	healthCtx, healthCancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer healthCancel()
 	go healthController.Heartbeat(healthCtx)
-	go healthController.ListenAndServe(8080)
+	go func() {
+		healthController.ListenAndServe(8080)(context.Background())
+	}()
 
 	readinessTicker := time.NewTicker(time.Second)
 	defer readinessTicker.Stop()

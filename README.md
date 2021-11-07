@@ -37,7 +37,7 @@ func main() {
 	}, pgx.WithHealthCheckPeriod(100 * time.Millisecond)) // sets the duration between checks of the health of idle conn.
 	if err != nil {
 		// error handling.
-		// ...
+		...
 	}
 
 	// add pool readiness controller to readiness group.
@@ -48,6 +48,9 @@ func main() {
 
 	// run health/readiness controller in squad group.
 	s.Run(h.Heartbeat)
+
+	// run health/readiness handler controller with graceful shutdown.
+	s.RunGracefully(h.ListenAndServe(5000), h.Shutdown)
 
 	...
 
