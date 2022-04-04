@@ -41,7 +41,7 @@ func (c *SqlController) CheckReadinessProbe(ctx context.Context) error {
 	return backoff.Retry(func() error {
 		stats := c.db.Stats()
 		switch {
-		case stats.MaxOpenConnections == 0:
+		case stats.MaxOpenConnections == 0 || stats.InUse == 0:
 			// since the original pool is not limited from above by
 			// the number of max open connections, we check the possibility
 			// of obtaining a new connection by ping.
