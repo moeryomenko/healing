@@ -55,8 +55,8 @@ func TestIntegration_Liveness(t *testing.T) {
 	require.NoError(t, err)
 	defer pgpool.Close()
 
-	healthController := health.New()
-	healthController.AddReadyChecker(pgpool.CheckReadinessProber)
+	healthController := healing.New()
+	healthController.AddReadyChecker("postgresql_controller", pgpool.CheckReadinessProber)
 
 	// run workload.
 	workloadCtx, workloadCancel := context.WithTimeout(context.Background(), 3*time.Second)

@@ -9,6 +9,8 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-mysql-org/go-mysql/client"
+
+	"github.com/moeryomenko/healing"
 )
 
 const pingInterval = 500 * time.Millisecond
@@ -70,14 +72,14 @@ func (p *Pool) GetConn(ctx context.Context) (*client.Conn, error) {
 // NOTE: perhaps you are confused that ping is used, but in this way
 // we check first of all that we can capture the connection,
 // but the availability of mysql.
-func (p *Pool) CheckReadinessProber(ctx context.Context) error {
+func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(time.Second)
 	}
 	maxElapseTime := time.Until(deadline)
 
-	return backoff.Retry(func() error {
+	err := backoff.Retry(func() error {
 		// NOTE: avoid load pool by acquiring connection from
 		// and reduce contention for connection under service load.
 		lastPingAt := time.Unix(atomic.LoadInt64(&p.lastPingAt), 0)
@@ -99,6 +101,23 @@ func (p *Pool) CheckReadinessProber(ctx context.Context) error {
 		MaxElapsedTime:      maxElapseTime,
 		Clock:               backoff.SystemClock,
 	})
+	if err != nil {
+		return healing.CheckResult{
+			Err: err,
+			Details: map[string]any{
+				"Status":      "Not Availabe",
+				"Description": err.Error(),
+			},
+		}
+	}
+
+	return healing.CheckResult{
+		Err: nil,
+		Details: map[string]any{
+			"Status":      "OK",
+			"Description": "Available for new requests",
+		},
+	}
 }
 
 type Option func(*PoolConfig)

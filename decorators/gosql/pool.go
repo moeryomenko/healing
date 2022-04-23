@@ -7,6 +7,7 @@ import (
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
+	"github.com/moeryomenko/healing"
 )
 
 var ErrPoolNotReady = errors.New("currently pool is busy")
@@ -31,14 +32,14 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) *SqlController {
 }
 
 // CheckReadinessProbe checks if the pool can acquire connection.
-func (c *SqlController) CheckReadinessProbe(ctx context.Context) error {
+func (c *SqlController) CheckReadinessProbe(ctx context.Context) healing.CheckResult {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(time.Second)
 	}
 	maxElapseTime := time.Until(deadline)
 
-	return backoff.Retry(func() error {
+	err := backoff.Retry(func() error {
 		stats := c.db.Stats()
 		switch {
 		case stats.MaxOpenConnections == 0 || stats.InUse == 0:
@@ -59,6 +60,20 @@ func (c *SqlController) CheckReadinessProbe(ctx context.Context) error {
 		MaxElapsedTime:      maxElapseTime,
 		Clock:               backoff.SystemClock,
 	})
+	if err != nil {
+		return healing.CheckResult{
+			Err: err,
+			Details: map[string]any{
+				"Status":      "Not Availble",
+				"Description": err.Error(),
+			},
+		}
+	}
+
+	return healing.CheckResult{
+		Err:     nil,
+		Details: "OK",
+	}
 }
 
 type Option func(*SqlController)

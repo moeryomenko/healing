@@ -1,7 +1,8 @@
-package health
+package healing
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,21 +18,27 @@ const (
 
 // CheckGroup launch checker concurrently.
 type CheckGroup struct {
-	checkers []checkFunc
+	checkers map[string]checkFunc
 	timeout  time.Duration
 	status   int32
+
+	checkStatuses map[string]any
+	mu            sync.Mutex
 }
 
 // NewCheckGroup returns new instacnce CheckGroup.
-func NewCheckGroup(timeout time.Duration, checkers ...checkFunc) *CheckGroup {
-	group := &CheckGroup{timeout: timeout, checkers: make([]checkFunc, 0, len(checkers))}
-	group.checkers = append(group.checkers, checkers...)
+func NewCheckGroup(timeout time.Duration) *CheckGroup {
+	group := &CheckGroup{
+		timeout:       timeout,
+		checkers:      make(map[string]checkFunc),
+		checkStatuses: make(map[string]any),
+	}
 	return group
 }
 
 // AddChecker adds checker to CheckGroup.
-func (g *CheckGroup) AddChecker(checker checkFunc) {
-	g.checkers = append(g.checkers, checker)
+func (g *CheckGroup) AddChecker(subsystem string, checker checkFunc) {
+	g.checkers[subsystem] = checker
 }
 
 // Check runs checkers.
@@ -43,9 +50,20 @@ func (g *CheckGroup) Check(ctx context.Context) {
 	// NOTE: flush status before checks.
 	atomic.StoreInt32(&g.status, successCheck)
 
-	for _, checker := range g.checkers {
+	for subsystem, checker := range g.checkers {
+		subsystem := subsystem
 		checker := checker
-		group.Go(func() error { return checker(ctx) })
+		group.Go(func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case res := <-timeoutCall(ctx, checker):
+				g.mu.Lock()
+				g.checkStatuses[subsystem] = res.Details
+				g.mu.Unlock()
+				return res.Err
+			}
+		})
 	}
 
 	err := group.Wait()
@@ -54,7 +72,24 @@ func (g *CheckGroup) Check(ctx context.Context) {
 	}
 }
 
+// GetDetails returns result of checks.
+func (g *CheckGroup) GetDetails() map[string]any {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.checkStatuses
+}
+
 // IsOK returns true if all checks passed normal.
 func (g *CheckGroup) IsOK() bool {
 	return atomic.LoadInt32(&g.status) == successCheck
+}
+
+func timeoutCall(ctx context.Context, fn checkFunc) chan CheckResult {
+	ch := make(chan CheckResult, 1)
+
+	go func() {
+		ch <- fn(ctx)
+	}()
+
+	return ch
 }

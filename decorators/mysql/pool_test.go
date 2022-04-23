@@ -51,8 +51,8 @@ func TestIntegration_Liveness(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	healthController := health.New()
-	healthController.AddReadyChecker(mypool.CheckReadinessProber)
+	healthController := healing.New()
+	healthController.AddReadyChecker("mysql_controller", mypool.CheckReadinessProber)
 
 	// run workload.
 	workloadCtx, workloadCancel := context.WithTimeout(context.Background(), 3*time.Second)
