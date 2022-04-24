@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/go-mysql-org/go-mysql/client"
 
 	"github.com/moeryomenko/healing"
