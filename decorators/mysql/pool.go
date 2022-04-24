@@ -73,13 +73,7 @@ func (p *Pool) GetConn(ctx context.Context) (*client.Conn, error) {
 // we check first of all that we can capture the connection,
 // but the availability of mysql.
 func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(time.Second)
-	}
-	maxElapseTime := time.Until(deadline)
-
-	err := backoff.Retry(func() error {
+	return healing.CheckHelper(ctx, pingInterval, func() error {
 		// NOTE: avoid load pool by acquiring connection from
 		// and reduce contention for connection under service load.
 		lastPingAt := time.Unix(atomic.LoadInt64(&p.lastPingAt), 0)
@@ -93,31 +87,7 @@ func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
 		}
 		defer p.PutConn(conn)
 		return conn.Ping()
-	}, &backoff.ExponentialBackOff{
-		InitialInterval:     pingInterval / 4,
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          backoff.DefaultMultiplier,
-		MaxInterval:         pingInterval / 2,
-		MaxElapsedTime:      maxElapseTime,
-		Clock:               backoff.SystemClock,
 	})
-	if err != nil {
-		return healing.CheckResult{
-			Err: err,
-			Details: map[string]any{
-				"Status":      "Not Availabe",
-				"Description": err.Error(),
-			},
-		}
-	}
-
-	return healing.CheckResult{
-		Err: nil,
-		Details: map[string]any{
-			"Status":      "OK",
-			"Description": "Available for new requests",
-		},
-	}
 }
 
 type Option func(*PoolConfig)

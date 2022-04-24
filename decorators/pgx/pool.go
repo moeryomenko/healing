@@ -9,8 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
-	"github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/moeryomenko/healing"
 )
@@ -77,13 +76,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Pool, error) {
 // we check first of all that we can capture the connection,
 // but the availability of postgresql.
 func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(time.Second)
-	}
-	maxElapseTime := time.Until(deadline)
-
-	err := backoff.Retry(func() error {
+	return healing.CheckHelper(ctx, pingInterval, func() error {
 		// NOTE: avoid load pool by acquiring connection from
 		// and reduce contention for connection under service load.
 		lastPingAt := time.Unix(atomic.LoadInt64(&p.lastPingAt), 0)
@@ -91,31 +84,7 @@ func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
 			return nil
 		}
 		return p.Ping(ctx)
-	}, &backoff.ExponentialBackOff{
-		InitialInterval:     pingInterval / 4,
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          backoff.DefaultMultiplier,
-		MaxInterval:         pingInterval / 2,
-		MaxElapsedTime:      maxElapseTime,
-		Clock:               backoff.SystemClock,
 	})
-	if err != nil {
-		return healing.CheckResult{
-			Err: err,
-			Details: map[string]any{
-				"Status":      "Not Availabe",
-				"Description": err.Error(),
-			},
-		}
-	}
-
-	return healing.CheckResult{
-		Err: nil,
-		Details: map[string]any{
-			"Status":      "OK",
-			"Description": "Available for new requests",
-		},
-	}
 }
 
 type Option func(*pgxpool.Config)

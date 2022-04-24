@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/moeryomenko/healing"
 )
 
@@ -33,13 +32,7 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) *SqlController {
 
 // CheckReadinessProbe checks if the pool can acquire connection.
 func (c *SqlController) CheckReadinessProbe(ctx context.Context) healing.CheckResult {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(time.Second)
-	}
-	maxElapseTime := time.Until(deadline)
-
-	err := backoff.Retry(func() error {
+	return healing.CheckHelper(ctx, c.pingInterval, func() error {
 		stats := c.db.Stats()
 		switch {
 		case stats.MaxOpenConnections == 0 || stats.InUse == 0:
@@ -52,28 +45,7 @@ func (c *SqlController) CheckReadinessProbe(ctx context.Context) healing.CheckRe
 		default:
 			return ErrPoolNotReady
 		}
-	}, &backoff.ExponentialBackOff{
-		InitialInterval:     c.pingInterval / 4,
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          backoff.DefaultMultiplier,
-		MaxInterval:         c.pingInterval / 2,
-		MaxElapsedTime:      maxElapseTime,
-		Clock:               backoff.SystemClock,
 	})
-	if err != nil {
-		return healing.CheckResult{
-			Err: err,
-			Details: map[string]any{
-				"Status":      "Not Availble",
-				"Description": err.Error(),
-			},
-		}
-	}
-
-	return healing.CheckResult{
-		Err:     nil,
-		Details: "OK",
-	}
 }
 
 type Option func(*SqlController)

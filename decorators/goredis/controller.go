@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/go-redis/redis/v8"
 	"github.com/moeryomenko/healing"
 )
@@ -36,37 +35,14 @@ func New(client *redis.Client, opts ...Option) *RedisController {
 
 // CheckReadinessProbe checks if the pool can acquire connection.
 func (c *RedisController) CheckReadinessProbe(ctx context.Context) healing.CheckResult {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(time.Second)
-	}
-	maxElapseTime := time.Until(deadline)
-
-	err := backoff.Retry(func() error {
+	return healing.CheckHelper(ctx, c.pingInterval, func() error {
 		stat := c.client.PoolStats()
 		if stat.IdleConns != 0 {
 			res := c.client.Ping(ctx)
 			return res.Err()
 		}
-		return ErrPoolNotReady
-	}, &backoff.ExponentialBackOff{
-		InitialInterval:     c.pingInterval / 4,
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          backoff.DefaultMultiplier,
-		MaxInterval:         c.pingInterval / 2,
-		MaxElapsedTime:      maxElapseTime,
-		Clock:               backoff.SystemClock,
+		return nil
 	})
-	if err != nil {
-		return healing.CheckResult{
-			Err:     err,
-			Details: err.Error(),
-		}
-	}
-
-	return healing.CheckResult{
-		Details: "OK",
-	}
 }
 
 type Option func(*RedisController)
