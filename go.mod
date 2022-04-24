@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/go-mysql-org/go-mysql v1.3.0
+	github.com/go-mysql-org/go-mysql v1.4.0
 	github.com/jackc/pgx/v4 v4.13.0
 	github.com/orlangure/gnomock v0.18.1
 	github.com/stretchr/testify v1.7.0
