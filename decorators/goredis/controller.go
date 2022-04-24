@@ -10,6 +10,8 @@ import (
 	"github.com/moeryomenko/healing"
 )
 
+const defaultPingInterval = 100 * time.Millisecond
+
 var ErrPoolNotReady = errors.New("currently pool is busy")
 
 // RedisController is adapter for check health of redis pool connections.
@@ -21,7 +23,8 @@ type RedisController struct {
 // New returns new instance of go-redis readiness controller.
 func New(client *redis.Client, opts ...Option) *RedisController {
 	c := &RedisController{
-		client: client,
+		client:       client,
+		pingInterval: defaultPingInterval,
 	}
 
 	for _, opt := range opts {
