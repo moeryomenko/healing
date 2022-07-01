@@ -61,10 +61,9 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Pool, error) {
 	return decoratedPool, nil
 }
 
-func (p *Pool) GetConn(ctx context.Context) (*client.Conn, error) {
-	// shift ping check, in order not to load the pool with requests.
+func (p *Pool) PutConn(conn *client.Conn) {
 	atomic.StoreInt64(&p.lastPingAt, time.Now().Unix())
-	return p.Pool.GetConn(ctx)
+	p.Pool.PutConn(conn)
 }
 
 // CheckReadinessProber checks if the pool can acquire connection.
@@ -76,15 +75,15 @@ func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
 		// NOTE: avoid load pool by acquiring connection from
 		// and reduce contention for connection under service load.
 		lastPingAt := time.Unix(atomic.LoadInt64(&p.lastPingAt), 0)
-		if time.Now().Before(lastPingAt.Add(pingInterval)) {
+		if time.Now().After(lastPingAt.Add(pingInterval)) {
 			return nil
 		}
 		// NOTE: get connection without affecting lastPingAt.
-		conn, err := p.Pool.GetConn(ctx)
+		conn, err := p.GetConn(ctx)
 		if err != nil {
 			return err
 		}
-		defer p.PutConn(conn)
+		defer p.Pool.PutConn(conn)
 		return conn.Ping()
 	})
 }

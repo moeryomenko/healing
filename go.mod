@@ -5,9 +5,11 @@ go 1.18
 require (
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/go-mysql-org/go-mysql v1.4.0
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jackc/pgx/v4 v4.13.0
+	github.com/moeryomenko/squad v1.5.0
 	github.com/orlangure/gnomock v0.18.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 
@@ -22,7 +24,6 @@ require (
 	github.com/docker/docker v20.10.10+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

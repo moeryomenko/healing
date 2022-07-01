@@ -41,7 +41,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Pool, error) {
 
 	shiftedPingChecker := time.Now().Unix()
 
-	poolConfig.BeforeAcquire = func(_ context.Context, _ *pgx.Conn) bool {
+	poolConfig.AfterRelease = func(_ *pgx.Conn) bool {
 		// shift ping check, in order not to load the pool with requests.
 		atomic.StoreInt64(&shiftedPingChecker, time.Now().Unix())
 		return true
@@ -80,7 +80,7 @@ func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
 		// NOTE: avoid load pool by acquiring connection from
 		// and reduce contention for connection under service load.
 		lastPingAt := time.Unix(atomic.LoadInt64(&p.lastPingAt), 0)
-		if time.Now().Before(lastPingAt.Add(pingInterval)) {
+		if time.Now().After(lastPingAt.Add(pingInterval)) {
 			return nil
 		}
 		return p.Ping(ctx)
