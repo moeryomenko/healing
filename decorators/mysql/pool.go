@@ -78,12 +78,12 @@ func (p *Pool) CheckReadinessProber(ctx context.Context) healing.CheckResult {
 		if time.Now().After(lastPingAt.Add(pingInterval)) {
 			return nil
 		}
-		// NOTE: get connection without affecting lastPingAt.
 		conn, err := p.GetConn(ctx)
 		if err != nil {
 			return err
 		}
-		defer p.Pool.PutConn(conn)
+		defer p.PutConn(conn)
+
 		return conn.Ping()
 	})
 }

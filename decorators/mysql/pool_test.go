@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// pg settings.
+// db settings.
 const (
 	user     = "test"
 	password = "testpass"
@@ -34,7 +34,7 @@ func TestIntegration_Liveness(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { gnomock.Stop(container) }()
 
-	// create our pg connections pool.
+	// create our mysql connections pool.
 	mypool, err := New(context.Background(), Config{
 		User:     user,
 		Password: password,
@@ -46,24 +46,23 @@ func TestIntegration_Liveness(t *testing.T) {
 			MinAlive: 2,
 			MaxAlive: 2,
 			MaxIdle:  2,
-		}),
-	)
+		}))
 	require.NoError(t, err)
 
-	healthController := healing.New(healing.WithCheckPeriod(100 * time.Millisecond))
+	healthController := healing.New(8080)
 	healthController.AddReadyChecker("mysql_controller", mypool.CheckReadinessProber)
 
 	// run workload.
 	workloadCtx, workloadCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer workloadCancel()
-	go Run(squad.WithDelay(workloadCtx, 3*time.Second), t, mypool)
+	go Run(squad.WithDelay(workloadCtx, 2*time.Second), t, mypool)
 	// run readiness controller.
 	healthCtx, healthCancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer healthCancel()
 	go healthController.Heartbeat(healthCtx)
-	go func() {
-		healthController.ListenAndServe(8080)(context.Background())
-	}()
+	defer healthController.Stop(context.Background())
+
+	<-time.After(time.Second)
 
 	readinessTicker := time.NewTicker(time.Second)
 	defer readinessTicker.Stop()
@@ -92,7 +91,7 @@ func Run(ctx context.Context, t *testing.T, pool *Pool) {
 		case <-ctx.Done():
 			return
 		default:
-			go func() { startSingleIdleXact(ctx, pool) }()
+			go startSingleIdleXact(ctx, pool)
 		}
 	}
 }
@@ -120,7 +119,7 @@ func startSingleIdleXact(ctx context.Context, pool *Pool) {
 		return
 	}
 
-	// Stop execution only if context has been done.
+	// Stop execution only if context has been done or naptime interval is timed out.
 	<-ctx.Done()
 	return
 }

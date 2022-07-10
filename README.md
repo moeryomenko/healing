@@ -21,7 +21,7 @@ func main() {
 	ctx := context.Background()
 
 	// create health/readiness controller.
-	h := healing.New(
+	h := healing.New(8081 // health controller port.
 		healing.WithCheckPeriod(3 * time.Second),
 		healing.WithReadinessTimeout(time.Second),
 		healing.WithReadyEndpoint("/readz"),
@@ -41,16 +41,13 @@ func main() {
 	}
 
 	// add pool readiness controller to readiness group.
-	h.AddReadyChecker(pool.CheckReadinessProber)
+	h.AddReadyChecker("pgx", pool.CheckReadinessProber)
 
 	// create squad group runner.
-	s := squad.NewSquad(ctx, squad.WithSiganlHandler())
+	s := squad.NewSquad(squad.WithSiganlHandler())
 
 	// run health/readiness controller in squad group.
-	s.Run(h.Heartbeat)
-
-	// run health/readiness handler controller with graceful shutdown.
-	s.RunGracefully(h.ListenAndServe(5000), h.Shutdown)
+	s.RunGracefully(h.Heartbeat, h.Stop)
 
 	...
 

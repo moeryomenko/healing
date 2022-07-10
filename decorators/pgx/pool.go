@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -95,7 +95,7 @@ type Option func(*pgxpool.Config)
 func WithTLS(certPath string) Option {
 	return func(cfg *pgxpool.Config) {
 		certPool := x509.NewCertPool()
-		cert, err := ioutil.ReadFile(certPath)
+		cert, err := os.ReadFile(certPath)
 		if err != nil {
 			return
 		}

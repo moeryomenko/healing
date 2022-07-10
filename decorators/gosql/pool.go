@@ -19,7 +19,7 @@ type SqlController struct {
 }
 
 // New returns new instance of sql.DB readiness controller.
-func New(ctx context.Context, db *sql.DB, opts ...Option) *SqlController {
+func New(_ context.Context, db *sql.DB, opts ...Option) *SqlController {
 	controller := &SqlController{
 		db:           db,
 		pingInterval: defaultPingInterval,

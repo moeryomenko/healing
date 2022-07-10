@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -30,9 +31,11 @@ type Health struct {
 	checkPeriod time.Duration
 
 	healz, ready string
+
+	wg sync.WaitGroup
 }
 
-func New(opts ...Option) *Health {
+func New(port int, opts ...Option) *Health {
 	h := &Health{
 		liveness:    NewCheckGroup(defaultCheckTimeout),
 		readiness:   NewCheckGroup(defaultCheckTimeout),
@@ -40,6 +43,24 @@ func New(opts ...Option) *Health {
 		healz:       defaultHealzEndpoint,
 		ready:       defaultReadyEndpoint,
 	}
+	router := http.NewServeMux()
+
+	handler := func(checker *CheckGroup) http.HandlerFunc {
+		return noCache(func(w http.ResponseWriter, r *http.Request) {
+			if !checker.IsOK() {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+
+			w.Header().Add("Content-Type", "application/json")
+			details := checker.GetDetails()
+			body, _ := json.Marshal(details)
+			w.Write(body)
+		})
+	}
+
+	router.HandleFunc(h.healz, handler(h.liveness))
+	router.HandleFunc(h.ready, handler(h.readiness))
+	h.server = &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: router}
 
 	for _, opt := range opts {
 		opt(h)
@@ -105,50 +126,49 @@ func (h *Health) Heartbeat(ctx context.Context) error {
 	checkTicker := time.NewTicker(h.checkPeriod)
 	defer checkTicker.Stop()
 
+	errCh := make(chan error, 1)
+	defer close(errCh)
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+
+		err := h.server.ListenAndServe()
+		if err != nil && errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+
+		errCh <- err
+	}()
+
 	for {
 		select {
 		case <-checkTicker.C:
-			h.liveness.Check(ctx)
-			h.readiness.Check(ctx)
+			h.runChecks(ctx, h.liveness.Check)
+			h.runChecks(ctx, h.readiness.Check)
 		case <-ctx.Done():
-			return nil
+			return <-errCh
 		}
 	}
 }
 
-// ListenAndServe provides HTTP listener with results of checks. It
-// offers reference HTTP server that offer all in one routes for liveness and readiness.
-func (h *Health) ListenAndServe(port int) func(context.Context) error {
-	router := http.NewServeMux()
-
-	handler := func(checker *CheckGroup) http.HandlerFunc {
-		return noCache(func(w http.ResponseWriter, r *http.Request) {
-			if !checker.IsOK() {
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}
-
-			w.Header().Add("Content-Type", "application/json")
-			details := checker.GetDetails()
-			body, _ := json.Marshal(details)
-			w.Write(body)
-		})
+// Stop shutdowns health controller http server and health controller.
+func (h *Health) Stop(ctx context.Context) error {
+	err := h.server.Shutdown(ctx)
+	if err != nil && errors.Is(err, http.ErrServerClosed) {
+		err = nil
 	}
-
-	router.HandleFunc(h.healz, handler(h.liveness))
-	router.HandleFunc(h.ready, handler(h.readiness))
-	h.server = &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: router}
-
-	return func(_ context.Context) error {
-		return h.server.ListenAndServe()
-	}
+	h.wg.Wait()
+	return err
 }
 
-// Shutdown shutdowns health controller http server.
-func (h *Health) Shutdown(ctx context.Context) error {
-	if err := h.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+func (h *Health) runChecks(ctx context.Context, checks func(context.Context)) {
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+
+		checks(ctx)
+	}()
 }
 
 // Ported from Goji's middleware, source:
@@ -181,7 +201,6 @@ var etagHeaders = []string{
 //      Pragma: no-cache (for HTTP/1.0 proxies/clients)
 func noCache(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		// Delete any ETag headers that may have been set
 		for _, v := range etagHeaders {
 			if r.Header.Get(v) != "" {

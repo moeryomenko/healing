@@ -49,7 +49,7 @@ func TestIntegration_Liveness(t *testing.T) {
 	require.NoError(t, err)
 	defer pgpool.Close()
 
-	healthController := healing.New()
+	healthController := healing.New(8080)
 	healthController.AddReadyChecker("postgresql_controller", pgpool.CheckReadinessProber)
 
 	// run workload.
@@ -60,8 +60,8 @@ func TestIntegration_Liveness(t *testing.T) {
 	healthCtx, healthCancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer healthCancel()
 	go healthController.Heartbeat(healthCtx)
-	go func() {
-		healthController.ListenAndServe(8080)(context.Background())
+	defer func() {
+		healthController.Stop(context.Background())
 	}()
 
 	readinessTicker := time.NewTicker(time.Second)
