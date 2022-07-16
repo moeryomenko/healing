@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -83,7 +86,7 @@ func New(port int, opts ...Option) *Health {
 		ReadTimeout:  h.requestTimeout,
 		WriteTimeout: h.requestTimeout,
 		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      noCache(h.router),
+		Handler:      middleware(h.router, h.requestTimeout),
 	}
 
 	return h
@@ -131,6 +134,29 @@ func WithReadinessTimeout(timeout time.Duration) Option {
 func WithRequestTimeout(timeout time.Duration) Option {
 	return func(h *Health) {
 		h.requestTimeout = timeout
+	}
+}
+
+// WithMetrics sets route for metrics handler.
+func WithMetrics(endpoint string) Option {
+	return func(h *Health) {
+		h.router.HandleFunc(endpoint, promhttp.Handler().ServeHTTP)
+	}
+}
+
+// WithProfiling exposes pprof handlers.
+func WithPProf() Option {
+	return func(h *Health) {
+		h.router.HandleFunc("/debug/pprof/", pprof.Index)
+		h.router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		h.router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		h.router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		h.router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		h.router.HandleFunc("/debug/pprof/heap", pprof.Handler("heap").ServeHTTP)
+		h.router.HandleFunc("/debug/pprof/goroutine", pprof.Handler("goroutine").ServeHTTP)
+		h.router.HandleFunc("/debug/pprof/block", pprof.Handler("block").ServeHTTP)
+		h.router.HandleFunc("/debug/pprof/allocs", pprof.Handler("allocs").ServeHTTP)
+		h.router.HandleFunc("/debug/pprof/mutex", pprof.Handler("mutex").ServeHTTP)
 	}
 }
 
@@ -219,16 +245,8 @@ var etagHeaders = []string{
 	"If-Unmodified-Since",
 }
 
-// noCache is a simple piece of middleware that sets a number of HTTP headers to prevent
-// a router (or subrouter) from being cached by an upstream proxy and/or client.
-//
-// As per http://wiki.nginx.org/HttpProxyModule - NoCache sets:
-//      Expires: Thu, 01 Jan 1970 00:00:00 UTC
-//      Cache-Control: no-cache, private, max-age=0
-//      X-Accel-Expires: 0
-//      Pragma: no-cache (for HTTP/1.0 proxies/clients)
-func noCache(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func middleware(next http.Handler, timeout time.Duration) http.Handler {
+	return http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			err := recover()
 			if err != nil {
@@ -249,5 +267,5 @@ func noCache(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
-	})
+	}), timeout, `timeout`)
 }
