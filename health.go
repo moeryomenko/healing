@@ -14,6 +14,10 @@ const (
 	defaultCheckPeriod   = 3 * time.Second
 	defaultHealzEndpoint = "/live"
 	defaultReadyEndpoint = "/ready"
+
+	// It's default health and ready timeout.
+	// see: https://github.com/kubernetes/kubernetes/blob/3b13e9445a3bf86c94781c898f224e6690399178/pkg/apis/core/v1/defaults.go#L211
+	defaultRequestTimeout = 1 * time.Second
 )
 
 type SubsystemStatus string
@@ -32,10 +36,12 @@ type CheckResult struct {
 }
 
 type Health struct {
-	liveness    *CheckGroup
-	readiness   *CheckGroup
-	server      *http.Server
-	checkPeriod time.Duration
+	liveness       *CheckGroup
+	readiness      *CheckGroup
+	server         *http.Server
+	router         *http.ServeMux
+	requestTimeout time.Duration
+	checkPeriod    time.Duration
 
 	healz, ready string
 
@@ -44,16 +50,17 @@ type Health struct {
 
 func New(port int, opts ...Option) *Health {
 	h := &Health{
-		liveness:    NewCheckGroup(defaultCheckTimeout),
-		readiness:   NewCheckGroup(defaultCheckTimeout),
-		checkPeriod: defaultCheckPeriod,
-		healz:       defaultHealzEndpoint,
-		ready:       defaultReadyEndpoint,
+		liveness:       NewCheckGroup(defaultCheckTimeout),
+		readiness:      NewCheckGroup(defaultCheckTimeout),
+		checkPeriod:    defaultCheckPeriod,
+		healz:          defaultHealzEndpoint,
+		ready:          defaultReadyEndpoint,
+		requestTimeout: defaultRequestTimeout,
+		router:         http.NewServeMux(),
 	}
-	router := http.NewServeMux()
 
 	handler := func(checker *CheckGroup) http.HandlerFunc {
-		return noCache(func(w http.ResponseWriter, r *http.Request) {
+		return func(w http.ResponseWriter, r *http.Request) {
 			if !checker.IsOK() {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			}
@@ -62,15 +69,21 @@ func New(port int, opts ...Option) *Health {
 			details := checker.GetDetails()
 			body, _ := json.Marshal(details)
 			w.Write(body)
-		})
+		}
 	}
 
-	router.HandleFunc(h.healz, handler(h.liveness))
-	router.HandleFunc(h.ready, handler(h.readiness))
-	h.server = &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: router}
+	h.router.HandleFunc(h.healz, handler(h.liveness))
+	h.router.HandleFunc(h.ready, handler(h.readiness))
 
 	for _, opt := range opts {
 		opt(h)
+	}
+
+	h.server = &http.Server{
+		ReadTimeout:  h.requestTimeout,
+		WriteTimeout: h.requestTimeout,
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      noCache(h.router),
 	}
 
 	return h
@@ -110,6 +123,14 @@ func WithLivenessTimeout(timeout time.Duration) Option {
 func WithReadinessTimeout(timeout time.Duration) Option {
 	return func(h *Health) {
 		h.readiness = NewCheckGroup(timeout)
+	}
+}
+
+// WithRequestTimeout sets http server write timeout.
+// see: https://github.com/golang/go/blob/180bcad33dcd3d59443fe8eda5ae7556b1b2945b/src/net/http/server.go#L978-L986.
+func WithRequestTimeout(timeout time.Duration) Option {
+	return func(h *Health) {
+		h.requestTimeout = timeout
 	}
 }
 
@@ -206,8 +227,15 @@ var etagHeaders = []string{
 //      Cache-Control: no-cache, private, max-age=0
 //      X-Accel-Expires: 0
 //      Pragma: no-cache (for HTTP/1.0 proxies/clients)
-func noCache(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			err := recover()
+			if err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+		}()
+
 		// Delete any ETag headers that may have been set
 		for _, v := range etagHeaders {
 			if r.Header.Get(v) != "" {
@@ -220,6 +248,6 @@ func noCache(h http.HandlerFunc) http.HandlerFunc {
 			w.Header().Set(k, v)
 		}
 
-		h.ServeHTTP(w, r)
-	}
+		next.ServeHTTP(w, r)
+	})
 }
