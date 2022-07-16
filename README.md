@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/moeryomenko/healing"
-	"github.com/moeryomenko/healing/decorators/pgx"
+	"github.com/moeryomenko/healing/checkers"
 	"github.com/moeryomenko/squad"
 )
 
@@ -27,21 +27,8 @@ func main() {
 		healing.WithReadyEndpoint("/readz"),
 	)
 
-	// create postgresql pool.
-	pool, err := pgx.New(ctx, pgx.Config{
-		Host:     pgHost,
-		Port:     pgPort,
-		User:     pgUser,
-		Password: pgPassword,
-		DBName:   pgName,
-	}, pgx.WithHealthCheckPeriod(100 * time.Millisecond)) // sets the duration between checks of the health of idle conn.
-	if err != nil {
-		// error handling.
-		...
-	}
-
 	// add pool readiness controller to readiness group.
-	h.AddReadyChecker("pgx", pool.CheckReadinessProber)
+	h.AddReadyChecker("pgx", checkers.PgxReadinessProber(pool))
 
 	// create squad group runner.
 	s := squad.NewSquad(squad.WithSiganlHandler())
