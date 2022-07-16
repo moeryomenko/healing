@@ -22,7 +22,7 @@ type CheckGroup struct {
 	timeout  time.Duration
 	status   int32
 
-	checkStatuses map[string]any
+	checkStatuses map[string]CheckResult
 	mu            sync.Mutex
 }
 
@@ -31,7 +31,7 @@ func NewCheckGroup(timeout time.Duration) *CheckGroup {
 	group := &CheckGroup{
 		timeout:       timeout,
 		checkers:      make(map[string]checkFunc),
-		checkStatuses: make(map[string]any),
+		checkStatuses: make(map[string]CheckResult),
 	}
 	return group
 }
@@ -56,12 +56,11 @@ func (g *CheckGroup) Check(ctx context.Context) {
 		group.Go(func() error {
 			select {
 			case <-ctx.Done():
+				g.setStatus(subsystem, CheckResult{Error: ctx.Err(), Status: DOWN})
 				return ctx.Err()
 			case res := <-timeoutCall(ctx, checker):
-				g.mu.Lock()
-				g.checkStatuses[subsystem] = res.Details
-				g.mu.Unlock()
-				return res.Err
+				g.setStatus(subsystem, res)
+				return res.Error
 			}
 		})
 	}
@@ -73,7 +72,7 @@ func (g *CheckGroup) Check(ctx context.Context) {
 }
 
 // GetDetails returns result of checks.
-func (g *CheckGroup) GetDetails() map[string]any {
+func (g *CheckGroup) GetDetails() map[string]CheckResult {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.checkStatuses
@@ -82,6 +81,12 @@ func (g *CheckGroup) GetDetails() map[string]any {
 // IsOK returns true if all checks passed normal.
 func (g *CheckGroup) IsOK() bool {
 	return atomic.LoadInt32(&g.status) == successCheck
+}
+
+func (g *CheckGroup) setStatus(subsystem string, status CheckResult) {
+	g.mu.Lock()
+	g.checkStatuses[subsystem] = status
+	g.mu.Unlock()
 }
 
 func timeoutCall(ctx context.Context, fn checkFunc) chan CheckResult {

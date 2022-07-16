@@ -25,12 +25,12 @@ func CheckHelper(ctx context.Context, pingInterval time.Duration, check func() e
 	})
 	if err != nil {
 		return CheckResult{
-			Err:     err,
-			Details: err.Error(),
+			Error:  err,
+			Status: DOWN,
 		}
 	}
 
 	return CheckResult{
-		Details: "OK",
+		Status: UP,
 	}
 }

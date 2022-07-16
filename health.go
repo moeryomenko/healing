@@ -16,12 +16,19 @@ const (
 	defaultReadyEndpoint = "/ready"
 )
 
+type SubsystemStatus string
+
+const (
+	UP   SubsystemStatus = "UP"
+	DOWN SubsystemStatus = "DOWN"
+)
+
 // The checkers must be compatible with this type.
 type checkFunc func(context.Context) CheckResult
 
 type CheckResult struct {
-	Err     error
-	Details any
+	Error  error           `json:"error,omitempty"`
+	Status SubsystemStatus `json:"status"`
 }
 
 type Health struct {

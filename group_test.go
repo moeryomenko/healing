@@ -45,7 +45,7 @@ func TestCheckGroup_Check(t *testing.T) {
 			name: "failed check",
 			checkers: []checkFunc{
 				func(ctx context.Context) CheckResult {
-					return CheckResult{Err: errors.New("failed check")}
+					return CheckResult{Error: errors.New("failed check")}
 				},
 			},
 			checkTimeout:  100 * time.Millisecond,
