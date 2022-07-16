@@ -34,16 +34,14 @@ func New(_ context.Context, db *sql.DB, opts ...Option) *SqlController {
 func (c *SqlController) CheckReadinessProbe(ctx context.Context) healing.CheckResult {
 	return healing.CheckHelper(ctx, c.pingInterval, func() error {
 		stats := c.db.Stats()
-		switch {
-		case stats.MaxOpenConnections == 0 || stats.InUse == 0:
-			// since the original pool is not limited from above by
-			// the number of max open connections, we check the possibility
-			// of obtaining a new connection by ping.
-			return c.db.PingContext(ctx)
-		case stats.MaxOpenConnections-stats.InUse >= 0:
-			return nil
-		default:
+		switch stats.MaxOpenConnections - stats.InUse {
+		case 0:
 			return ErrPoolNotReady
+		default:
+			// NOTE: if the value is non-zero, then this means that
+			// the connection pool has the ability to allocate
+			// a connection and perform a ping.
+			return c.db.PingContext(ctx)
 		}
 	})
 }
