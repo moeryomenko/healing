@@ -3,7 +3,6 @@ module github.com/moeryomenko/healing
 go 1.18
 
 require (
-	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/go-mysql-org/go-mysql v1.4.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jackc/pgx/v4 v4.13.0

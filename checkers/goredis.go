@@ -9,14 +9,14 @@ import (
 
 // RedisReadinessProber returns redis conn pool readiness checker function.
 func RedisReadinessProber(client *redis.Client, opts ...PoolOptions) func(context.Context) healing.CheckResult {
-	cfg := pool_config{recheckInterval: defaultPingInterval, lowerLimit: defaultLowerLimit}
+	cfg := pool_config{lowerLimit: defaultLowerLimit}
 
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	return func(ctx context.Context) healing.CheckResult {
-		return CheckHelper(ctx, cfg.recheckInterval, func() error {
+		return CheckHelper(func() error {
 			stats := client.PoolStats()
 
 			if stats.TotalConns == 0 {

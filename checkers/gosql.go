@@ -9,14 +9,14 @@ import (
 
 // SQLPoolReadinessChecker returns readiness checker function for golang sql.DB.
 func SQLPoolReadinessChecker(db *sql.DB, opts ...PoolOptions) func(context.Context) healing.CheckResult {
-	cfg := pool_config{recheckInterval: defaultPingInterval, lowerLimit: defaultLowerLimit}
+	cfg := pool_config{lowerLimit: defaultLowerLimit}
 
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	return func(ctx context.Context) healing.CheckResult {
-		return CheckHelper(ctx, cfg.recheckInterval, func() error {
+		return CheckHelper(func() error {
 			stats := db.Stats()
 			if stats.MaxOpenConnections == 0 {
 				return db.PingContext(ctx)
