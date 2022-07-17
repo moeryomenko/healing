@@ -8,7 +8,7 @@ import (
 )
 
 // MySQLReadinessProber returns mysql conn pool readiness checker function.
-func MySQLReadinessProber(pool *client.Pool, opts ...PoolOptions) func(context.Context) healing.CheckResult {
+func MySQLReadinessProber(pool *client.Pool, maxAlive int, opts ...PoolOptions) func(context.Context) healing.CheckResult {
 	cfg := pool_config{lowerLimit: defaultLowerLimit}
 
 	for _, opt := range opts {
@@ -20,18 +20,21 @@ func MySQLReadinessProber(pool *client.Pool, opts ...PoolOptions) func(context.C
 			var stats client.ConnectionStats
 			pool.GetStats(&stats)
 
-			return poolCheck(
-				ctx,
-				stats.IdleCount, stats.TotalCount, cfg.lowerLimit,
-				func(ctx context.Context) error {
-					conn, err := pool.GetConn(ctx)
-					if err != nil {
-						return err
-					}
-					defer func() { pool.PutConn(conn) }()
+			ping := func(ctx context.Context) error {
+				conn, err := pool.GetConn(ctx)
+				if err != nil {
+					return err
+				}
+				defer func() { pool.PutConn(conn) }()
 
-					return conn.Ping()
-				})
+				return conn.Ping()
+			}
+
+			if stats.TotalCount < maxAlive {
+				return ping(ctx)
+			}
+
+			return poolCheck(ctx, stats.IdleCount, maxAlive, cfg.lowerLimit, ping)
 		})
 	}
 }

@@ -18,7 +18,7 @@ func SQLPoolReadinessChecker(db *sql.DB, opts ...PoolOptions) func(context.Conte
 	return func(ctx context.Context) healing.CheckResult {
 		return CheckHelper(func() error {
 			stats := db.Stats()
-			if stats.MaxOpenConnections == 0 {
+			if stats.MaxOpenConnections == 0 || stats.InUse < stats.MaxOpenConnections {
 				return db.PingContext(ctx)
 			}
 

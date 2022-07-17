@@ -27,10 +27,6 @@ func CheckHelper(check func() error) healing.CheckResult {
 func poolCheck(ctx context.Context, idle, max, lower int, check func(context.Context) error) error {
 	ratioFree := idle / max * 100
 
-	if ratioFree == 0 {
-		return ErrPoolNotReady
-	}
-
 	if ratioFree > lower {
 		return check(ctx)
 	}

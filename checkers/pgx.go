@@ -19,13 +19,13 @@ func PgxReadinessProber(pool *pgxpool.Pool, opts ...PoolOptions) func(context.Co
 		return CheckHelper(func() error {
 			stats := pool.Stat()
 
-			if stats.TotalConns() == 0 {
+			total, max := stats.TotalConns(), stats.MaxConns()
+
+			if total == 0 || total < max {
 				return pool.Ping(ctx)
 			}
 
-			return poolCheck(ctx,
-				int(stats.IdleConns()), int(stats.TotalConns()), cfg.lowerLimit,
-				pool.Ping)
+			return poolCheck(ctx, int(stats.IdleConns()), int(total), cfg.lowerLimit, pool.Ping)
 		})
 	}
 }

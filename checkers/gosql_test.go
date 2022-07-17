@@ -2,13 +2,12 @@ package checkers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/orlangure/gnomock"
 	"github.com/orlangure/gnomock/preset/mysql"
 	"github.com/stretchr/testify/assert"
@@ -17,14 +16,7 @@ import (
 	"github.com/moeryomenko/healing"
 )
 
-// db settings.
-const (
-	user     = "test"
-	password = "testpass"
-	database = "testdb"
-)
-
-func TestIntegration_MySQLReadiness(t *testing.T) {
+func TestIntegration_SQLReadiness(t *testing.T) {
 	// start mysql.
 	my := mysql.Preset(
 		mysql.WithUser(user, password),
@@ -36,23 +28,23 @@ func TestIntegration_MySQLReadiness(t *testing.T) {
 	defer func() { gnomock.Stop(container) }()
 
 	// create our mysql connections pool.
-	pool := client.NewPool(
-		log.Default().Printf,
-		2,
-		2,
-		2,
-		fmt.Sprintf("%s:%d", container.Host, container.DefaultPort()),
+	dsn := fmt.Sprintf("%s:%s@(%s:%d)/%s?sql_mode=TRADITIONAL&parseTime=true&tls=false",
 		user, password,
+		container.Host, container.DefaultPort(),
 		database,
 	)
+	pool, err := sql.Open(`mysql`, dsn)
+	require.NoError(t, err)
+	pool.SetMaxOpenConns(20)
+	pool.SetMaxIdleConns(20)
 
 	healthController := healing.New(8080)
-	healthController.AddReadyChecker("mysql_controller", MySQLReadinessProber(pool, 2))
+	healthController.AddReadyChecker("mysql_controller", SQLPoolReadinessChecker(pool))
 
 	// run workload.
 	workloadCtx, workloadCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer workloadCancel()
-	go RunMySQLLoad(workloadCtx, t, pool)
+	go RunSQLLoad(workloadCtx, t, pool)
 	// run readiness controller.
 	healthCtx, healthCancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer healthCancel()
@@ -82,38 +74,39 @@ func TestIntegration_MySQLReadiness(t *testing.T) {
 	}
 }
 
-func RunMySQLLoad(ctx context.Context, t *testing.T, pool *client.Pool) {
+func RunSQLLoad(ctx context.Context, t *testing.T, pool *sql.DB) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			for i := 0; i < 100; i++ {
-				go startMySQLIdleXact(ctx, pool)
+			for i := 0; i < 20; i++ {
+				go startSQLIdleXact(ctx, pool)
 			}
 		}
 	}
 }
 
-// startMySQLIdleXact starts transaction and goes sleeping for specified amount of time.
-func startMySQLIdleXact(ctx context.Context, pool *client.Pool) {
-	conn, err := pool.GetConn(ctx)
+// startSQLIdleXact starts transaction and goes sleeping for specified amount of time.
+func startSQLIdleXact(ctx context.Context, pool *sql.DB) {
+	conn, err := pool.Conn(ctx)
 	if err != nil {
 		return
 	}
-	defer pool.PutConn(conn)
-	err = conn.Begin()
+	defer conn.Close()
+
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelDefault})
 	if err != nil {
 		return
 	}
-	defer func() { _ = conn.Rollback() }()
+	defer func() { tx.Rollback() }()
 
 	// Create a temp table using single row from target table. Later,
 	// transaction will be rolled back and temp table will be dropped. Also, any errors could
 	// be ignored, because in this case transaction (aborted) also stay idle.
 	temp := time.Now().Unix()
 	q := fmt.Sprintf("CREATE TABLE temp_%d (c INT)", temp)
-	_, err = conn.Execute(q)
+	_, err = tx.Exec(q)
 	if err != nil {
 		return
 	}
