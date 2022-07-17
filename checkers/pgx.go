@@ -29,6 +29,8 @@ func PgxReadinessProber(pool *pgxpool.Pool, opts ...PoolOptions) func(context.Co
 		opt(&cfg)
 	}
 
+	check := checkPgPoolAvailability(pool)
+
 	return func(ctx context.Context) healing.CheckResult {
 		return CheckHelper(func() error {
 			stats := pool.Stat()
@@ -36,10 +38,10 @@ func PgxReadinessProber(pool *pgxpool.Pool, opts ...PoolOptions) func(context.Co
 			total, max := stats.TotalConns(), pool.Config().MaxConns
 
 			if max == 0 || total < max {
-				return checkPgPoolAvailability(pool)(ctx)
+				return check(ctx)
 			}
 
-			return poolCheck(ctx, int(stats.IdleConns()), int(total), cfg.lowerLimit, checkPgPoolAvailability(pool))
+			return poolCheck(ctx, int(stats.IdleConns()), int(total), cfg.lowerLimit, check)
 		})
 	}
 }

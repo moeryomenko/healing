@@ -62,8 +62,12 @@ func New(port int, opts ...Option) *Health {
 		router:         http.NewServeMux(),
 	}
 
+	for _, opt := range opts {
+		opt(h)
+	}
+
 	handler := func(checker *CheckGroup) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
+		return http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !checker.IsOK() {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			}
@@ -72,21 +76,15 @@ func New(port int, opts ...Option) *Health {
 			details := checker.GetDetails()
 			body, _ := json.Marshal(details)
 			w.Write(body)
-		}
+		}), h.requestTimeout, `timeout`).ServeHTTP
 	}
 
 	h.router.HandleFunc(h.healz, handler(h.liveness))
 	h.router.HandleFunc(h.ready, handler(h.readiness))
 
-	for _, opt := range opts {
-		opt(h)
-	}
-
 	h.server = &http.Server{
-		ReadTimeout:  h.requestTimeout,
-		WriteTimeout: h.requestTimeout,
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      middleware(h.router, h.requestTimeout),
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: middleware(h.router, h.requestTimeout),
 	}
 
 	return h
@@ -246,7 +244,7 @@ var etagHeaders = []string{
 }
 
 func middleware(next http.Handler, timeout time.Duration) http.Handler {
-	return http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			err := recover()
 			if err != nil {
@@ -267,5 +265,5 @@ func middleware(next http.Handler, timeout time.Duration) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
-	}), timeout, `timeout`)
+	})
 }

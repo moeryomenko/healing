@@ -38,12 +38,13 @@ func MySQLReadinessProber(pool *client.Pool, maxAlive int, opts ...PoolOptions) 
 		opt(&cfg)
 	}
 
+	check := checkMySQLPoolAvailability(pool)
+
 	return func(ctx context.Context) healing.CheckResult {
 		return CheckHelper(func() error {
 			var stats client.ConnectionStats
 			pool.GetStats(&stats)
 
-			check := checkMySQLPoolAvailability(pool)
 			if stats.TotalCount < maxAlive {
 				return check(ctx)
 			}
