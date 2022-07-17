@@ -43,9 +43,10 @@ func (g *CheckGroup) AddChecker(subsystem string, checker checkFunc) {
 
 // Check runs checkers.
 func (g *CheckGroup) Check(ctx context.Context) {
-	group := &errgroup.Group{}
 	ctx, cancel := context.WithTimeout(ctx, g.timeout)
 	defer cancel()
+
+	group, checkCtx := errgroup.WithContext(ctx)
 
 	// NOTE: flush status before checks.
 	atomic.StoreInt32(&g.status, successCheck)
@@ -55,10 +56,10 @@ func (g *CheckGroup) Check(ctx context.Context) {
 		checker := checker
 		group.Go(func() error {
 			select {
-			case <-ctx.Done():
+			case <-checkCtx.Done():
 				g.setStatus(subsystem, CheckResult{Error: ctx.Err(), Status: DOWN})
 				return ctx.Err()
-			case res := <-timeoutCall(ctx, checker):
+			case res := <-timeoutCall(checkCtx, checker):
 				g.setStatus(subsystem, res)
 				return res.Error
 			}

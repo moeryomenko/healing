@@ -30,7 +30,7 @@ func TestIntegration_PGReadiness(t *testing.T) {
 
 	// create our pg connections pool.
 	poolConfig, err := pgxpool.ParseConfig(
-		fmt.Sprintf("user=%s password=%s host=%s port=%d dbname=%s pool_max_conns=2",
+		fmt.Sprintf("user=%s password=%s host=%s port=%d dbname=%s pool_max_conns=1",
 			user, password, container.Host, container.DefaultPort(), database))
 	require.NoError(t, err)
 
@@ -80,9 +80,9 @@ func RunPgLoad(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 		case <-ctx.Done():
 			return
 		default:
-			go func() {
-				startPgIdleXact(ctx, pool)
-			}()
+			for i := 0; i < 100; i++ {
+				go func() { startPgIdleXact(ctx, pool) }()
+			}
 		}
 	}
 }
@@ -100,10 +100,10 @@ func startPgIdleXact(ctx context.Context, pool *pgxpool.Pool) {
 			return err
 		}
 		defer func() {
-			tx.Rollback(context.Background())
+			tx.Rollback(ctx)
 		}()
 
-		// Stop execution only if context has been done or naptime interval is timed out.
+		// Stop execution only if context has been done.
 		<-ctx.Done()
 		return nil
 	})

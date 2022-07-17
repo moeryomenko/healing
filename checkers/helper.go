@@ -3,6 +3,7 @@ package checkers
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/moeryomenko/healing"
 )
@@ -21,6 +22,17 @@ func CheckHelper(check func() error) healing.CheckResult {
 
 	return healing.CheckResult{
 		Status: healing.UP,
+	}
+}
+
+func checkPoolLiveness(ctx context.Context, period time.Duration, ping func(context.Context) error) func() error {
+	lastPing := time.Now()
+	return func() error {
+		now := time.Now()
+		if now.After(lastPing.Add(period)) {
+			return ping(ctx)
+		}
+		return nil
 	}
 }
 
