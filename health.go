@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +71,12 @@ func New(port int, opts ...Option) *Health {
 		return http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !checker.IsOK() {
 				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+
+			// if it's a check from kubernetes dont write the details of checks, because k8s doesnt use them.
+			// see: https://github.com/kubernetes/kubernetes/blob/1df526b3f79a212f575889dc388158f48e9ac204/pkg/probe/http/http.go#L129-L136
+			if strings.HasPrefix(r.Header.Get("User-Agent"), "kube-probe") {
+				return
 			}
 
 			w.Header().Add("Content-Type", "application/json")
