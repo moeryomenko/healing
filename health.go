@@ -180,6 +180,13 @@ func (h *Health) AddReadyChecker(subsystem string, check checkFunc) {
 	h.readiness.AddChecker(subsystem, check)
 }
 
+// AddSubsystem adds liveness and readiness checks for given subsystem.
+// For more details see AddLiveChecker and AddReadChecker.
+func (h *Health) AddSubsystem(subsystem string, liveness, readiness checkFunc) {
+	h.AddLiveChecker(subsystem, liveness)
+	h.AddReadyChecker(subsystem, readiness)
+}
+
 // Heartbeat periodically run all checkers for both `live` and `ready` states.
 func (h *Health) Heartbeat(ctx context.Context) error {
 	checkTicker := time.NewTicker(h.checkPeriod)
