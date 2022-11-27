@@ -59,7 +59,7 @@ func (g *CheckGroup) Check(ctx context.Context) {
 			case <-checkCtx.Done():
 				g.setStatus(subsystem, CheckResult{Error: ctx.Err(), Status: DOWN})
 				return ctx.Err()
-			case res := <-timeoutCall(checkCtx, checker):
+			case res := <-asyncInvoke(checkCtx, checker):
 				g.setStatus(subsystem, res)
 				return res.Error
 			}
@@ -90,7 +90,7 @@ func (g *CheckGroup) setStatus(subsystem string, status CheckResult) {
 	g.mu.Unlock()
 }
 
-func timeoutCall(ctx context.Context, fn checkFunc) chan CheckResult {
+func asyncInvoke(ctx context.Context, fn checkFunc) chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
 	go func() {
