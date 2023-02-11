@@ -8,6 +8,7 @@ import (
 	"github.com/moeryomenko/healing"
 )
 
+// ErrPoolNotReady indicate than database connection pool waste all available connection.
 var ErrPoolNotReady = errors.New("currently pool is busy")
 
 // CheckHelper is helper function for check liveness and readiness.
@@ -49,5 +50,5 @@ func poolCheck(ctx context.Context, idle, max, lower int, check func(context.Con
 		return check(ctx)
 	}
 
-	return nil
+	return ErrPoolNotReady
 }
