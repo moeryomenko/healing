@@ -26,10 +26,12 @@ func CheckHelper(check func() error) healing.CheckResult {
 }
 
 func checkPoolLiveness(ctx context.Context, period time.Duration, ping func(context.Context) error) func() error {
+	// NOTE: liveness ping has owen check period, cause dont annoy db by ping command.
 	lastPing := time.Now()
 	return func() error {
 		now := time.Now()
-		if now.After(lastPing.Add(period)) {
+		if now.After(lastPing) {
+			lastPing = now
 			return ping(ctx)
 		}
 		return nil
@@ -37,13 +39,15 @@ func checkPoolLiveness(ctx context.Context, period time.Duration, ping func(cont
 }
 
 func poolCheck(ctx context.Context, idle, max, lower int, check func(context.Context) error) error {
+	// NOTE: if ratio idle connection in pull great than lower ration
+	// we can check pool, but don't have enough free connections
+	// that will be useful for processing incoming requests leave check.
+
 	ratioFree := idle / max * 100
 
 	if ratioFree > lower {
 		return check(ctx)
 	}
 
-	// NOTE: don't have enough free connections
-	// that will be useful for processing incoming requests.
 	return nil
 }

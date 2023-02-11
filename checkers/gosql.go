@@ -30,26 +30,24 @@ func SQLPoolReadinessChecker(db *sql.DB, opts ...PoolOptions) func(context.Conte
 		opt(&cfg)
 	}
 
-	check := checkPoolAvailability(db)
+	check := func(ctx context.Context) error {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		return conn.Close()
+	}
 
 	return func(ctx context.Context) healing.CheckResult {
 		return CheckHelper(func() error {
 			stats := db.Stats()
+			// NOTE: if connection pool dont limited or numbers connection into pool
+			// less than can aquire, check availablity of pool.
 			if stats.MaxOpenConnections == 0 || stats.InUse < stats.MaxOpenConnections {
 				return check(ctx)
 			}
 
 			return poolCheck(ctx, stats.Idle, stats.MaxOpenConnections, cfg.lowerLimit, check)
 		})
-	}
-}
-
-func checkPoolAvailability(pool *sql.DB) func(context.Context) error {
-	return func(ctx context.Context) error {
-		conn, err := pool.Conn(ctx)
-		if err != nil {
-			return err
-		}
-		return conn.Close()
 	}
 }
