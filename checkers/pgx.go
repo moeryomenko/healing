@@ -44,15 +44,7 @@ func PgxReadinessProber(pool *pgxpool.Pool, opts ...PoolOptions) func(context.Co
 		return CheckHelper(func() error {
 			stats := pool.Stat()
 
-			total, max := stats.TotalConns(), pool.Config().MaxConns
-
-			// NOTE: if connection pool dont limited or numbers connection into pool
-			// less than can aquire, check availablity of pool.
-			if max == 0 || total < max {
-				return check(ctx)
-			}
-
-			return poolCheck(ctx, int(stats.IdleConns()), int(total), cfg.lowerLimit, check)
+			return poolCheck(ctx, int(stats.IdleConns()), int(pool.Config().MaxConns), cfg.lowerLimit, check)
 		})
 	}
 }

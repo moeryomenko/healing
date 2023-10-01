@@ -44,6 +44,10 @@ func poolCheck(ctx context.Context, idle, max, lower int, check func(context.Con
 	// we can check pool, but don't have enough free connections
 	// that will be useful for processing incoming requests leave check.
 
+	if max == 0 {
+		return check(ctx)
+	}
+
 	ratioFree := idle / max * 100
 
 	if ratioFree > lower {

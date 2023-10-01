@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	redisclient "github.com/go-redis/redis/v8"
 	"github.com/orlangure/gnomock"
 	"github.com/orlangure/gnomock/preset/redis"
+	redisclient "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

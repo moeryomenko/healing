@@ -25,7 +25,6 @@ func MySQLProbes(pool *client.Pool, maxAlive int, opts ...PoolOptions) (
 			}
 			defer func() { pool.PutConn(conn) }()
 			return conn.Ping()
-
 		}))
 	}, MySQLReadinessProber(pool, maxAlive, opts...)
 }
@@ -44,10 +43,6 @@ func MySQLReadinessProber(pool *client.Pool, maxAlive int, opts ...PoolOptions) 
 		return CheckHelper(func() error {
 			var stats client.ConnectionStats
 			pool.GetStats(&stats)
-
-			if stats.TotalCount < maxAlive {
-				return check(ctx)
-			}
 
 			return poolCheck(ctx, stats.IdleCount, maxAlive, cfg.lowerLimit, check)
 		})
