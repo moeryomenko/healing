@@ -56,7 +56,7 @@ func TestCheckGroup_Check(t *testing.T) {
 			name:          "no checks",
 			checkers:      nil,
 			checkTimeout:  100 * time.Millisecond,
-			checkDuration: 100 * time.Millisecond,
+			checkDuration: 200 * time.Millisecond,
 			expected:      true,
 		},
 	}

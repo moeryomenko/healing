@@ -1,16 +1,16 @@
 module github.com/moeryomenko/healing
 
-go 1.18
+go 1.21
 
 require (
 	github.com/go-mysql-org/go-mysql v1.4.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jackc/pgx/v4 v4.13.0
+	github.com/moeryomenko/synx v0.11.2
 	github.com/orlangure/gnomock v0.18.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/streadway/amqp v1.0.0
 	github.com/stretchr/testify v1.7.1
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 
 require (
@@ -59,6 +59,7 @@ require (
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/net v0.0.0-20211008194852-3b03d305991f // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20211008145708-270636b82663 // indirect

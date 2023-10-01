@@ -6,21 +6,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
+	"github.com/moeryomenko/synx"
 )
 
-const (
-	defaultCheckTimeout = 2 * time.Second
-
-	successCheck = iota
-	failedCheck
-)
+const defaultCheckTimeout = 2 * time.Second
 
 // CheckGroup launch checker concurrently.
 type CheckGroup struct {
 	checkers map[string]checkFunc
 	timeout  time.Duration
-	status   int32
+	status   atomic.Bool
 
 	checkStatuses map[string]CheckResult
 	mu            sync.Mutex
@@ -46,29 +41,24 @@ func (g *CheckGroup) Check(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, g.timeout)
 	defer cancel()
 
-	group, checkCtx := errgroup.WithContext(ctx)
+	group := synx.NewCtxGroup(ctx)
 
 	// NOTE: flush status before checks.
-	atomic.StoreInt32(&g.status, successCheck)
+	g.status.Store(true)
 
 	for subsystem, checker := range g.checkers {
 		subsystem := subsystem
 		checker := checker
-		group.Go(func() error {
-			select {
-			case <-checkCtx.Done():
-				g.setStatus(subsystem, CheckResult{Error: ctx.Err(), Status: DOWN})
-				return ctx.Err()
-			case res := <-asyncInvoke(checkCtx, checker):
-				g.setStatus(subsystem, res)
-				return res.Error
-			}
+		group.Go(func(ctx context.Context) error {
+			res := checker(ctx)
+			g.setStatus(subsystem, res)
+			return res.Error
 		})
 	}
 
 	err := group.Wait()
 	if err != nil {
-		atomic.StoreInt32(&g.status, failedCheck)
+		g.status.Store(false)
 	}
 }
 
@@ -81,21 +71,11 @@ func (g *CheckGroup) GetDetails() map[string]CheckResult {
 
 // IsOK returns true if all checks passed normal.
 func (g *CheckGroup) IsOK() bool {
-	return atomic.LoadInt32(&g.status) == successCheck
+	return g.status.Load()
 }
 
 func (g *CheckGroup) setStatus(subsystem string, status CheckResult) {
 	g.mu.Lock()
 	g.checkStatuses[subsystem] = status
 	g.mu.Unlock()
-}
-
-func asyncInvoke(ctx context.Context, fn checkFunc) chan CheckResult {
-	ch := make(chan CheckResult, 1)
-
-	go func() {
-		ch <- fn(ctx)
-	}()
-
-	return ch
 }
