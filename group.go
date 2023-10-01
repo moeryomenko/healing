@@ -2,7 +2,6 @@ package healing
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,7 +17,7 @@ type CheckGroup struct {
 	status   atomic.Bool
 
 	checkStatuses map[string]CheckResult
-	mu            sync.Mutex
+	mu            synx.Spinlock
 }
 
 // NewCheckGroup returns new instacnce CheckGroup.
